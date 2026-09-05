@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from rich.console import Console
 
 from .asr import transcribe_whisperx
 from .glossary import load_glossary
 from .media import compose_timeline, extract_audio, fit_audio, probe_duration, render_video
-from .models import Config, JobState, Segment, SourceInfo, TranslationUnit
+from .models import Config, JobState, Segment, TranslationUnit
 from .segment import merge_segments
-from .source import import_source
+from .source import bilibili_cache_title, import_source
 from .subtitles import write_srt
 from .translate import OpenAICompatibleTranslator
 from .tts import CosyVoiceTTS
@@ -22,7 +23,10 @@ class Pipeline:
         self.cfg = cfg
 
     def job_dir_for(self, value: str) -> Path:
-        stem = Path(value).stem if not value.startswith(("http://", "https://")) else "url-job"
+        if value.startswith(("http://", "https://")):
+            stem = "url-job"
+        else:
+            stem = bilibili_cache_title(value) or Path(value).stem
         return self.cfg.work_dir / slugify(stem)
 
     def run(self, value: str, job_dir: Path | None = None, resume: bool = True) -> Path:

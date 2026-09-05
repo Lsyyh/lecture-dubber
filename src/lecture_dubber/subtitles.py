@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from .models import TranslationUnit
 
 
 def _fmt(seconds: float) -> str:
-    ms = int(round(seconds * 1000))
+    ms = round(seconds * 1000)
     h, ms = divmod(ms, 3600000)
     m, ms = divmod(ms, 60000)
     s, ms = divmod(ms, 1000)

@@ -36,3 +36,9 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+# typer's function-call option defaults are the framework idiom, not a bug.
+# BLE001: `dubber doctor` deliberately probes optional imports with a broad catch.
+# TRY004: glossary validation reports bad config content, so ValueError is right.
+ignore = ["B008", "BLE001", "TRY004"]

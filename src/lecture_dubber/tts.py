@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+
 import soundfile as sf
+
 from .models import Config
 from .textnorm import spoken_form
 

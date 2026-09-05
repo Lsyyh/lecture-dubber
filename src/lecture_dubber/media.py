@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from .utils import ensure_command, run
 
 
@@ -51,7 +52,7 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
     filters = []
     labels = []
     for i, (start, _) in enumerate(segment_files):
-        delay_ms = max(0, int(round(start * 1000)))
+        delay_ms = max(0, round(start * 1000))
         label = f"a{i}"
         filters.append(f"[{i}:a]adelay={delay_ms}|{delay_ms}[{label}]")
         labels.append(f"[{label}]")

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-import httpx
-from .models import Config, TranslationUnit
 
+import httpx
+
+from .models import Config, TranslationUnit
 
 SYSTEM = """You translate university lectures into natural spoken Mandarin Chinese for dubbing.
 Preserve technical meaning. Do not add explanations. Prefer concise spoken Chinese over literal translation.

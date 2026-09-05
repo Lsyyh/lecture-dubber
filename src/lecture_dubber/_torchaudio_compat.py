@@ -55,7 +55,7 @@ def ensure_lightning_load_trusted() -> None:
     weights_only=False; torch >= 2.6 flipped the default and the checkpoint stores
     omegaconf hyper-parameters that the safe loader rejects."""
     try:
-        import lightning_fabric.utilities.cloud_io as cloud_io
+        from lightning_fabric.utilities import cloud_io
     except ImportError:
         return
     original = cloud_io._load

@@ -3,8 +3,8 @@ from __future__ import annotations
 import gc
 from pathlib import Path
 
-from .models import Config, Segment, Word
 from ._torchaudio_compat import ensure_lightning_load_trusted, ensure_torchaudio_compat
+from .models import Config, Segment, Word
 
 
 def transcribe_whisperx(audio_path: Path, cfg: Config) -> tuple[str, list[Segment]]:
