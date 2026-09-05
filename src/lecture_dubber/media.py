@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from .utils import ensure_command, run
@@ -46,19 +47,31 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
     out_wav.parent.mkdir(parents=True, exist_ok=True)
     if not segment_files:
         raise ValueError("No TTS segment files to compose")
-    cmd = ["ffmpeg", "-y"]
-    for _, path in segment_files:
-        cmd.extend(["-i", str(path)])
-    filters = []
+    # One -i per segment builds a command line that can exceed the 8191-char
+    # limit of the cmd.exe spawn on this machine, so keep the line short:
+    # inputs are passed relative to the output directory and the filtergraph
+    # goes into a script file instead of the command line.
+    graph = []
     labels = []
     for i, (start, _) in enumerate(segment_files):
         delay_ms = max(0, round(start * 1000))
         label = f"a{i}"
-        filters.append(f"[{i}:a]adelay={delay_ms}|{delay_ms}[{label}]")
+        graph.append(f"[{i}:a]adelay={delay_ms}|{delay_ms}[{label}]")
         labels.append(f"[{label}]")
-    filters.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0,atrim=0:{total_duration:.3f}[mix]")
-    cmd.extend(["-filter_complex", ";".join(filters), "-map", "[mix]", "-ar", "48000", str(out_wav)])
-    run(cmd)
+    graph.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0,atrim=0:{total_duration:.3f}[mix]")
+    graph_file = out_wav.parent / (out_wav.name + ".graph")
+    graph_file.write_text(";\n".join(graph), encoding="utf-8")
+    inputs: list[str] = []
+    for _, path in segment_files:
+        inputs += ["-i", os.path.relpath(path, out_wav.parent)]
+    try:
+        run(
+            ["ffmpeg", "-y", *inputs, "-/filter_complex", graph_file.name,
+             "-map", "[mix]", "-ar", "48000", out_wav.name],
+            cwd=out_wav.parent,
+        )
+    finally:
+        graph_file.unlink(missing_ok=True)
     return out_wav
 
 

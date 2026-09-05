@@ -31,9 +31,9 @@ def ensure_command(name: str) -> str:
     return path
 
 
-def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run(cmd: list[str], *, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        _join_cmdline(cmd), check=check, text=True, capture_output=True, errors="replace"
+        _join_cmdline(cmd), check=check, text=True, capture_output=True, errors="replace", cwd=cwd
     )
 
 
