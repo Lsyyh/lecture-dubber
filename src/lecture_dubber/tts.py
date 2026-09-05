@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 import soundfile as sf
 from .models import Config
+from .textnorm import spoken_form
 
 
 class CosyVoiceTTS:
@@ -21,6 +22,7 @@ class CosyVoiceTTS:
         self.model = AutoModel(model_dir=str(cfg.cosyvoice_model_dir), fp16=cfg.cosyvoice_fp16)
 
     def synthesize(self, text: str, out_wav: Path, speed: float = 1.0) -> Path:
+        text = spoken_form(text)
         out_wav.parent.mkdir(parents=True, exist_ok=True)
         chunks = list(self.model.inference_sft(
             text,
