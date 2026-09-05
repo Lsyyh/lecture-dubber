@@ -6,7 +6,7 @@ asr_model: pretrained_models/faster-whisper-large-v3
 asr_align_model: pretrained_models/wav2vec2-large-xlsr-53-english
 asr_device: cuda
 asr_compute_type: float16
-asr_batch_size: 8
+asr_batch_size: 16
 asr_language: en
 
 merge_min_duration: 4.0
@@ -35,3 +35,10 @@ max_rewrite_attempts: 2
 
 original_audio_gain_db: -24.0
 dub_audio_gain_db: 0.0
+render_preset: veryfast
+
+translate_workers: 4
+subtitle_alignment: auto
+qc_enabled: true
+qc_frames: 6
+cleanup_intermediates: true

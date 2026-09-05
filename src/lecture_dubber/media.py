@@ -42,6 +42,27 @@ def fit_audio(in_wav: Path, out_wav: Path, target_duration: float, soft_min: flo
     return 1.0
 
 
+def sample_frames(video: Path, count: int) -> list[Path]:
+    """Sample `count` PNG frames spread across the video for VLM inspection."""
+    ensure_command("ffmpeg")
+    if count < 1:
+        return []
+    out_dir = Path("outputs") / "qc_frames"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    total = probe_duration(video)
+    frames: list[Path] = []
+    for i in range(count):
+        t = total * (i + 0.5) / count
+        out = out_dir / f"{video.stem}-{i:02d}.png"
+        try:
+            run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1", str(out)])
+        except Exception:
+            continue
+        if out.exists():
+            frames.append(out)
+    return frames
+
+
 def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: float, out_wav: Path) -> Path:
     ensure_command("ffmpeg")
     out_wav.parent.mkdir(parents=True, exist_ok=True)
@@ -75,7 +96,11 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
     return out_wav
 
 
-def render_video(video: Path, dub_wav: Path, subtitle: Path | None, out_mp4: Path, original_gain_db: float, dub_gain_db: float) -> Path:
+def render_video(
+    video: Path, dub_wav: Path, subtitle: Path | None, out_mp4: Path,
+    original_gain_db: float, dub_gain_db: float, subtitle_force_style: str | None = None,
+    render_preset: str = "medium",
+) -> Path:
     ensure_command("ffmpeg")
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
     filter_parts = [
@@ -86,13 +111,14 @@ def render_video(video: Path, dub_wav: Path, subtitle: Path | None, out_mp4: Pat
     cmd = ["ffmpeg", "-y", "-i", str(video), "-i", str(dub_wav)]
     if subtitle is not None:
         escaped = str(subtitle).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-        filter_parts.append(f"[0:v]subtitles='{escaped}'[vout]")
+        style = f":force_style={subtitle_force_style}" if subtitle_force_style else ""
+        filter_parts.append(f"[0:v]subtitles='{escaped}'{style}[vout]")
         video_map = "[vout]"
     else:
         video_map = "0:v"
     cmd.extend([
         "-filter_complex", ";".join(filter_parts),
-        "-map", video_map, "-map", "[aout]", "-c:v", "libx264", "-preset", "medium",
+        "-map", video_map, "-map", "[aout]", "-c:v", "libx264", "-preset", render_preset,
         "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-shortest", str(out_mp4)
     ])
     run(cmd)

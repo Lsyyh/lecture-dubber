@@ -1,0 +1,6 @@
+Looking in indexes: https://mirrors.huaweicloud.com/repository/pypi/simple/
+Collecting setuptools
+  Downloading https://mirrors.huaweicloud.com/repository/pypi/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl (818 kB)
+     ---------------------------------------- 818.2/818.2 kB 9.0 MB/s  0:00:00
+Installing collected packages: setuptools
+Successfully installed setuptools-84.0.0

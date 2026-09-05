@@ -41,4 +41,5 @@ line-length = 100
 # typer's function-call option defaults are the framework idiom, not a bug.
 # BLE001: `dubber doctor` deliberately probes optional imports with a broad catch.
 # TRY004: glossary validation reports bad config content, so ValueError is right.
-ignore = ["B008", "BLE001", "TRY004"]
+# S112: frame sampling in the QC path is best-effort by design.
+ignore = ["B008", "BLE001", "TRY004", "S112"]

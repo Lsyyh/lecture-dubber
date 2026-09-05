@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 
 from .models import Config, TranslationUnit
+from .utils import extract_json
 
 SYSTEM = """You translate university lectures into natural spoken Mandarin Chinese for dubbing.
 Preserve technical meaning. Do not add explanations. Prefer concise spoken Chinese over literal translation.
@@ -42,7 +41,7 @@ Next context: {next_text or '(none)'}
 Glossary:\n{glossary_text}
 Translate only the current source. Keep it concise enough for dubbing."""
         raw = self._chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
-        return str(json.loads(raw)["translation"]).strip()
+        return str(extract_json(raw)["translation"]).strip()
 
     def compress(self, unit: TranslationUnit, actual_duration: float) -> str:
         user = f"""The current Chinese dubbing is too long.
@@ -52,4 +51,4 @@ Current spoken duration: {actual_duration:.2f} seconds
 Target duration: {unit.duration:.2f} seconds
 Rewrite the translation substantially more concisely without losing technical content. Return JSON only."""
         raw = self._chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
-        return str(json.loads(raw)["translation"]).strip()
+        return str(extract_json(raw)["translation"]).strip()

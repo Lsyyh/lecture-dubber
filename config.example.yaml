@@ -15,7 +15,8 @@ merge_target_duration: 9.0
 merge_max_duration: 15.0
 merge_max_gap: 1.2
 
-# Run Qwen locally behind an OpenAI-compatible endpoint, e.g. vLLM.
+# Run Qwen locally behind an OpenAI-compatible endpoint, e.g. llama-server with a
+# small VLM (translate + subtitle QC in one model).
 llm_base_url: http://127.0.0.1:8000/v1
 llm_api_key: EMPTY
 llm_model: Qwen/Qwen3-8B-Instruct
@@ -24,10 +25,15 @@ target_language: zh-CN
 glossary_path: glossary.yaml
 
 # Paths are intentionally explicit so CosyVoice can live in a separate environment/repo.
+# CosyVoice1 (SFT speakers) or CosyVoice2 (zero-shot cloning, faster) - point
+# cosyvoice_model_dir at the model folder; v2 needs a reference voice below.
 cosyvoice_root: third_party/CosyVoice
 cosyvoice_model_dir: pretrained_models/CosyVoice-300M-SFT
 cosyvoice_speaker: 中文女
 cosyvoice_fp16: true
+# cosyvoice_model_dir: pretrained_models/CosyVoice2-0.5B
+# cosyvoice_prompt_wav: pretrained_models/prompt_wav/zh_female.wav
+# cosyvoice_prompt_text: 这是一段用于音色克隆的参考音频。梯度下降是一种迭代优化算法，用于寻找可微函数的局部最小值。
 
 duration_soft_min: 0.88
 duration_soft_max: 1.12
@@ -36,3 +42,15 @@ max_rewrite_attempts: 2
 
 original_audio_gain_db: -24.0
 dub_audio_gain_db: 0.0
+# x264 preset for the final render (medium|fast|veryfast ...): faster = smaller encode time.
+render_preset: veryfast
+
+# Parallel translation requests (start llama-server with -np matching this).
+translate_workers: 4
+# "auto" lets the VLM detect burned-in source subtitles; "top"/"bottom" force it.
+subtitle_alignment: auto
+# VLM quality control: hardsub pre-check and rendered-subtitle post-check.
+qc_enabled: true
+qc_frames: 6
+# Delete tts/, source/*.m4s and dub.wav after a successful render.
+cleanup_intermediates: true

@@ -92,6 +92,9 @@ class Config(BaseModel):
     cosyvoice_model_dir: Path = Path("pretrained_models/CosyVoice-300M-SFT")
     cosyvoice_speaker: str = "中文女"
     cosyvoice_fp16: bool = True
+    # CosyVoice2 backend: reference voice for zero-shot cloning.
+    cosyvoice_prompt_wav: Path | None = None
+    cosyvoice_prompt_text: str = ""
 
     duration_soft_min: float = 0.88
     duration_soft_max: float = 1.12
@@ -100,3 +103,15 @@ class Config(BaseModel):
 
     original_audio_gain_db: float = -24.0
     dub_audio_gain_db: float = 0.0
+    # x264 speed preset for the final render; faster presets trade some size for time.
+    render_preset: str = "medium"
+
+    # Parallel translation requests to the LLM server (needs matching server slots).
+    translate_workers: int = 4
+    # "auto" lets the VLM detect burned-in source subtitles; "top"/"bottom" force it.
+    subtitle_alignment: str = "auto"
+    # VLM quality control: hardsub pre-check and rendered-subtitle post-check.
+    qc_enabled: bool = True
+    qc_frames: int = 6
+    # Delete tts/, source/*.m4s and dub.wav after a successful render.
+    cleanup_intermediates: bool = True
