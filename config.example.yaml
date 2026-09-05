@@ -1,0 +1,38 @@
+work_dir: outputs
+source_max_height: 1080
+subtitle_languages: [en, en-US, en-GB]
+
+asr_model: large-v3
+asr_device: cuda
+asr_compute_type: float16
+asr_batch_size: 8
+asr_language: en
+# Optional local wav2vec2 alignment model directory; unset uses the WhisperX default (hub download).
+# asr_align_model: pretrained_models/wav2vec2-large-xlsr-53-english
+
+merge_min_duration: 4.0
+merge_target_duration: 9.0
+merge_max_duration: 15.0
+merge_max_gap: 1.2
+
+# Run Qwen locally behind an OpenAI-compatible endpoint, e.g. vLLM.
+llm_base_url: http://127.0.0.1:8000/v1
+llm_api_key: EMPTY
+llm_model: Qwen/Qwen3-8B-Instruct
+llm_temperature: 0.2
+target_language: zh-CN
+glossary_path: glossary.yaml
+
+# Paths are intentionally explicit so CosyVoice can live in a separate environment/repo.
+cosyvoice_root: third_party/CosyVoice
+cosyvoice_model_dir: pretrained_models/CosyVoice-300M-SFT
+cosyvoice_speaker: 中文女
+cosyvoice_fp16: true
+
+duration_soft_min: 0.88
+duration_soft_max: 1.12
+duration_rewrite_threshold: 1.22
+max_rewrite_attempts: 2
+
+original_audio_gain_db: -24.0
+dub_audio_gain_db: 0.0
