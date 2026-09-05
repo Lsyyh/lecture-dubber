@@ -7,6 +7,22 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+# On this Windows machine children are spawned through cmd.exe (CreateProcess is
+# hooked), so any argument containing shell metacharacters must be quoted with
+# MSVCRT rules or cmd splits it at | ; & etc.
+_CMD_META = re.compile(r'[\s"|&;<>^()]')
+
+
+def _join_cmdline(cmd: list[str]) -> str:
+    parts: list[str] = []
+    for arg in cmd:
+        if _CMD_META.search(arg):
+            escaped = arg.replace('"', r'\"')
+            parts.append(f'"{escaped}"')
+        else:
+            parts.append(arg)
+    return " ".join(parts)
+
 
 def ensure_command(name: str) -> str:
     path = shutil.which(name)
@@ -16,7 +32,9 @@ def ensure_command(name: str) -> str:
 
 
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, check=check, text=True, capture_output=True)
+    return subprocess.run(
+        _join_cmdline(cmd), check=check, text=True, capture_output=True, errors="replace"
+    )
 
 
 def read_json(path: Path) -> Any:

@@ -45,6 +45,7 @@ dubber fetch <URL> -o <dir>       # 只下载不处理
 - **LLM 服务**：Windows 没有 vLLM，用 `tools\llama-cpp` 的 llama-server（CUDA 12.4 构建）+ Qwen3-8B Q6_K GGUF，OpenAI 兼容接口 127.0.0.1:8000/v1；Qwen3 是混合思考模型，启动参数带 `--chat-template-kwargs {"enable_thinking":false}`。
 - **兼容垫片**：`src/lecture_dubber/_torchaudio_compat.py` 在导入 whisperx 前补回 torchaudio 2.9 删除的 `info/load/AudioMetaData`（soundfile 实现，供 pyannote VAD 使用），并让 lightning 以 `weights_only=False` 加载 whisperx 内置 VAD 检查点。`tts.py` 用 soundfile 写 wav（torchaudio.save 在 2.9 需要 torchcodec）。CosyVoice 上游若更新，重查这两处。
 - **ffmpeg**：vendored `tools\ffmpeg\bin`（gyan essentials，含 libass），任何调用方都必须把它放 PATH 最前，否则 whisperx 的 load_audio 会在中文 Windows 上因 GBK stderr 解码崩溃。
+- **本机 CreateProcess 被劫持重走 cmd.exe**（python→python 传 `|` 参数可复现，根因未查明，疑似安全软件/系统策略）：未加引号的 `|`、`;`、`&` 会被 cmd 当作管道/分隔符拆开。因此 `utils.run` 自行构建命令行并对含元字符的参数按 MSVCRT 规则加引号，并对子进程输出 `errors="replace"`（ffmpeg 报错文本是 GBK）。新增 subprocess 调用必须走 `utils.run`，不要直接用 `subprocess`。
 
 ## 平台与环境坑
 

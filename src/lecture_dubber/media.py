@@ -24,6 +24,7 @@ def probe_duration(path: Path) -> float:
 
 
 def fit_audio(in_wav: Path, out_wav: Path, target_duration: float, soft_min: float, soft_max: float) -> float:
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
     actual = probe_duration(in_wav)
     if target_duration <= 0 or actual <= 0:
         out_wav.write_bytes(in_wav.read_bytes())
