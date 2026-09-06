@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Self
+from collections import deque
 
 import numpy as np
 
@@ -149,22 +149,58 @@ class ProcessCapture:
 
 
 class DubPlayer:
-    """Serialize dub chunks onto the default output device."""
+    """Continuous-stream dub playback with a jitter buffer.
 
-    def __init__(self, sample_rate: int = 48000) -> None:
-        import soundcard as sc
+    Synthesized chunks are resampled to the output rate and appended to one
+    continuous buffer; a PortAudio callback pulls frames at all times and
+    inserts silence when the buffer runs dry, so playback never glitches
+    between clauses. While the dub trails the live speech the consumption
+    rate is gently raised (up to 1.3x, i.e. faster speech instead of drops);
+    chunks more than ``stale_drop_s`` behind are discarded outright.
+    """
+
+    CLAUSE_GAP_S = 0.08  # tiny pause between clauses so words don't collide
+
+    def __init__(self, sample_rate: int = 48000, stale_drop_s: float = 10.0) -> None:
+        import sounddevice as sd
 
         self.sr = sample_rate
-        self._spk = sc.default_speaker()
-        self._player = self._spk.player(samplerate=sample_rate, channels=1)
+        self.stale_drop_s = stale_drop_s
         self._lock = threading.Lock()
+        self._buf = np.zeros(0, dtype=np.float32)  # buffered output frames
+        self._meta: deque[tuple[float, float]] = deque()  # (cum_end_f, source_end_ts)
+        self._consumed = 0  # input frames consumed so far
+        self._speed = 1.0
+        self.played_source_ts: float | None = None
+        self._stream = sd.OutputStream(
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            blocksize=0,
+            callback=self._cb,
+        )
+        self._stream.start()
 
-    def __enter__(self) -> Self:
-        self._player.__enter__()
-        return self
+    # ---- callback thread ----
 
-    def __exit__(self, *exc) -> None:
-        self._player.__exit__(*exc)
+    def _cb(self, outdata, frames, _t, _status) -> None:
+        try:
+            with self._lock:
+                take = min(int(frames * self._speed), len(self._buf))
+                if take <= 0:
+                    outdata.fill(0.0)
+                    return
+                idx = np.linspace(0.0, take - 1, num=frames)
+                out = np.interp(idx, np.arange(take), self._buf[:take])
+                outdata[:] = out.reshape(-1, 1)
+                self._buf = self._buf[take:]
+                self._consumed += take
+                while self._meta and self._consumed >= self._meta[0][0]:
+                    self.played_source_ts = self._meta.popleft()[1]
+        except Exception:
+            outdata.fill(0.0)
+
+    # ---- producer side ----
 
     @staticmethod
     def resample_to(pcm: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
@@ -176,12 +212,39 @@ class DubPlayer:
         idx = np.linspace(0.0, len(pcm) - 1, num=n_out)
         return np.interp(idx, np.arange(len(pcm)), pcm).astype(np.float32)
 
-    def play(self, pcm: np.ndarray, src_sr: int) -> float:
-        """Play one chunk, block until finished. Returns wall-clock seconds when
-        playback actually started (for lag tracking)."""
+    def enqueue(self, pcm: np.ndarray, src_sr: int, source_end_ts: float) -> None:
         out = self.resample_to(pcm, src_sr, self.sr)
         with self._lock:
-            started = time.time()
-            self._player.play(out)
-            time.sleep(len(out) / self.sr + 0.02)
-            return started
+            if len(self._buf) > 0:
+                gap = np.zeros(int(self.CLAUSE_GAP_S * self.sr), dtype=np.float32)
+                self._buf = np.concatenate([self._buf, gap])
+            self._buf = np.concatenate([self._buf, out])
+            self._meta.append((self._consumed + len(self._buf), source_end_ts))
+
+    def tick(self, last_ts: float) -> dict:
+        """Called periodically: adapt playback speed to lag, drop stale chunks.
+
+        Returns {"dropped": n, "lag_s": lag}."""
+        lag = 0.0 if self.played_source_ts is None else max(0.0, last_ts - self.played_source_ts)
+        # gentle catch-up: above 3 s behind, consume up to 30% faster
+        self._speed = min(1.3, 1.0 + max(0.0, lag - 3.0) / 10.0)
+        dropped = 0
+        with self._lock:
+            while self._meta and last_ts - self._meta[0][1] > self.stale_drop_s:
+                cum_end = self._meta[0][0]
+                cut = min(cum_end, self._consumed + len(self._buf)) - self._consumed
+                if cut > 0:
+                    self._buf = self._buf[cut:]
+                    self._consumed += cut
+                self._meta.popleft()
+                dropped += 1
+        if dropped:
+            self.played_source_ts = None  # jumped ahead; recompute on next fresh chunk
+        return {"dropped": dropped, "lag_s": round(lag, 2)}
+
+    def close(self) -> None:
+        try:
+            self._stream.stop()
+            self._stream.close()
+        except Exception:
+            pass

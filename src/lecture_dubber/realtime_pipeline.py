@@ -30,8 +30,6 @@ ASR_TICK_S = 1.0
 WINDOW_PREROLL_S = 0.25
 MAX_WINDOW_S = 28.0
 TTS_MERGE_MAX = 4
-# Dub more than this far behind the live speech is skipped by the play loop.
-STALE_SKIP_S = 6.0
 
 
 class RealtimeSession:
@@ -194,13 +192,8 @@ class RealtimeSession:
         committed = self._spb.update(words, now)
         with self._state_lock:
             self._partial = " ".join(w.word for w in words[-24:])
-            lag = 0.0
-            if self._played_source_ts is not None:
-                lag = (
-                    max(0.0, self._ring.last_ts - self._played_source_ts)
-                    if self._played_source_ts is not None
-                    else 0.0
-                )
+            played = getattr(self._player, "played_source_ts", self._played_source_ts)
+            lag = max(0.0, self._ring.last_ts - played) if played is not None else 0.0
             self._policy = latency_policy(lag)
         if committed:
             self._commit_ts = committed[-1].end_ts
@@ -297,9 +290,10 @@ class RealtimeSession:
             # CosyVoice per-call overhead dominates short clauses, and merged
             # text also synthesizes with better prosody.
             batch = [payload]
+            deadline = time.time() + 0.35
             while len(batch) < TTS_MERGE_MAX:
                 try:
-                    batch.append(self._q_tts.get_nowait())
+                    batch.append(self._q_tts.get(timeout=max(0.0, deadline - time.time())))
                 except queue.Empty:
                     break
             text = "，".join(p["zh"].strip("。，") for p in batch)
@@ -336,48 +330,41 @@ class RealtimeSession:
 
     # ---------- stage: playback ----------
 
+    def _last_ts(self) -> float:
+        return self._ring.last_ts if self._ring is not None else 0.0
+
     def _play_loop(self) -> None:
-        player_ctx = self._player
-        entered = False
+        """Chunks go into the player's continuous jitter buffer; the player's
+        callback owns timing, silence fill, speed catch-up and stale drops."""
         try:
-            if hasattr(player_ctx, "__enter__"):
-                player_ctx.__enter__()
-                entered = True
             while not self.stop_event.is_set():
                 try:
-                    chunk = self._q_play.get(timeout=0.5)
+                    chunk = self._q_play.get(timeout=0.3)
                 except queue.Empty:
+                    self._player.tick(self._last_ts())
                     continue
-                # Catch-up: dub spoken more than STALE_SKIP_S in the past can
-                # never be heard in sync; skip it and move on, or the queue
-                # grows unboundedly when the dub rate trails the source rate.
-                last_ts = self._ring.last_ts if self._ring is not None else 0.0
-                if last_ts - chunk.source_end_ts > STALE_SKIP_S:
-                    self._counters["stale_skipped"] = self._counters.get("stale_skipped", 0) + 1
-                    self._log(
-                        "stale_skipped",
-                        seq=chunk.clause_seq,
-                        behind_s=round(last_ts - chunk.source_end_ts, 1),
-                    )
-                    continue
-                started = player_ctx.play(chunk.pcm, chunk.sample_rate)
-                self._played_source_ts = chunk.source_end_ts
+                self._player.enqueue(chunk.pcm, chunk.sample_rate, chunk.source_end_ts)
                 self._counters["dubbed"] += 1
                 self._log(
                     "played",
                     seq=chunk.clause_seq,
-                    started=started,
                     duration_s=len(chunk.pcm) / chunk.sample_rate,
                 )
+                result = self._player.tick(self._last_ts())
+                if result.get("dropped"):
+                    self._counters["stale_skipped"] = (
+                        self._counters.get("stale_skipped", 0) + result["dropped"]
+                    )
+                    self._log("stale_skipped", count=result["dropped"], **result)
         except Exception as e:
             if not self.stop_event.is_set():
                 self.phase = "error"
                 self.error = f"playback failed: {e}"
                 self.stop_event.set()
         finally:
-            if entered:
+            if hasattr(self._player, "close"):
                 try:
-                    player_ctx.__exit__(None, None, None)
+                    self._player.close()
                 except Exception:
                     pass
 
@@ -385,13 +372,11 @@ class RealtimeSession:
 
     def snapshot(self) -> dict:
         with self._state_lock:
+            # the continuous-stream player tracks its own playback position
+            played = getattr(self._player, "played_source_ts", self._played_source_ts)
             lag = 0.0
-            if self._ring is not None:
-                lag = (
-                    max(0.0, self._ring.last_ts - self._played_source_ts)
-                    if self._played_source_ts is not None
-                    else 0.0
-                )
+            if self._ring is not None and played is not None:
+                lag = max(0.0, self._ring.last_ts - played)
             return {
                 "running": self.phase in ("loading", "live"),
                 "phase": self.phase,

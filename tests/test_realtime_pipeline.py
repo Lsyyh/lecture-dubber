@@ -73,18 +73,21 @@ class FakeTTS:
 
 
 class FakePlayer:
+    """Same contract as DubPlayer: enqueue/tick/close + played_source_ts."""
+
     def __init__(self) -> None:
         self.played: list[float] = []
+        self.played_source_ts: float | None = None
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return None
-
-    def play(self, pcm, src_sr: int) -> float:
+    def enqueue(self, pcm, src_sr: int, source_end_ts: float) -> None:
         self.played.append(len(pcm) / src_sr)
-        return time.time()
+        self.played_source_ts = source_end_ts
+
+    def tick(self, last_ts: float) -> dict:
+        return {"dropped": 0, "lag_s": 0.0}
+
+    def close(self) -> None:
+        pass
 
 
 def _run_session(seconds: float):
