@@ -42,4 +42,5 @@ line-length = 100
 # BLE001: `dubber doctor` deliberately probes optional imports with a broad catch.
 # TRY004: glossary validation reports bad config content, so ValueError is right.
 # S112: frame sampling in the QC path is best-effort by design.
-ignore = ["B008", "BLE001", "TRY004", "S112"]
+# S110: the llama-server slot erase is best-effort too.
+ignore = ["B008", "BLE001", "TRY004", "S112", "S110"]

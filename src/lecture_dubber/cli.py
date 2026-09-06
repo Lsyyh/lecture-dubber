@@ -55,3 +55,17 @@ def doctor(config: Path | None = typer.Option(Path("config.yaml"), "--config", "
         checks["whisperx"] = False
     for k, ok in checks.items():
         console.print(f"{'[green]OK[/green]' if ok else '[red]MISS[/red]'} {k}")
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8010, help="Web UI port"),
+    host: str = typer.Option("127.0.0.1", help="Bind address"),
+    config: Path | None = typer.Option(Path("config.yaml"), "--config", "-c"),
+):
+    """Run the local web UI for job submission and live progress monitoring."""
+    import uvicorn
+
+    cfg = load_config(config if config and config.exists() else None)
+    from .webui import create_app
+    uvicorn.run(create_app(cfg), host=host, port=port, log_level="info")

@@ -106,8 +106,10 @@ class Config(BaseModel):
     # x264 speed preset for the final render; faster presets trade some size for time.
     render_preset: str = "medium"
 
-    # Parallel translation requests to the LLM server (needs matching server slots).
-    translate_workers: int = 4
+    # Parallel translation requests. Keep at 1: llama.cpp concurrent slots can
+    # mix up responses with the Qwen3-VL template, and the 2B model is fast
+    # enough serially (~0.5 s per unit).
+    translate_workers: int = 1
     # "auto" lets the VLM detect burned-in source subtitles; "top"/"bottom" force it.
     subtitle_alignment: str = "auto"
     # VLM quality control: hardsub pre-check and rendered-subtitle post-check.

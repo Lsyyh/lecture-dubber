@@ -8,6 +8,8 @@ verifies the Chinese subtitles were burned correctly.
 from __future__ import annotations
 
 import base64
+import json
+import typing
 from pathlib import Path
 
 import httpx
@@ -21,7 +23,7 @@ class VisionQC:
         self.cfg = cfg
         self.client = httpx.Client(timeout=180.0)
 
-    def _chat_images(self, prompt: str, images: list[Path]) -> dict:
+    def _chat_images(self, prompt: str, images: list[Path], schema: dict) -> dict:
         content: list[dict] = [{"type": "text", "text": prompt}]
         for image in images:
             b64 = base64.b64encode(image.read_bytes()).decode()
@@ -30,13 +32,35 @@ class VisionQC:
             "model": "qc",
             "messages": [{"role": "user", "content": content}],
             "temperature": 0.0,
-            "response_format": {"type": "json_object"},
+            # json_schema enforces a server-side grammar; json_object is broken
+            # on llama.cpp b10795 and lets the model answer in free text.
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "qc_result", "schema": schema},
+            },
         }
         url = self.cfg.llm_base_url.rstrip("/") + "/chat/completions"
-        r = self.client.post(url, json=payload, headers={"Authorization": f"Bearer {self.cfg.llm_api_key}"})
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        r = self.client.post(url, content=body, headers={"Authorization": f"Bearer {self.cfg.llm_api_key}",
+                                                         "Content-Type": "application/json"})
         r.raise_for_status()
         raw = r.json()["choices"][0]["message"]["content"]
         return extract_json(raw)
+
+    _POSITION_SCHEMA: typing.ClassVar[dict] = {
+        "type": "object",
+        "properties": {"position": {"type": "string", "enum": ["bottom", "top", "none"]}},
+        "required": ["position"],
+    }
+    _RENDER_SCHEMA: typing.ClassVar[dict] = {
+        "type": "object",
+        "properties": {
+            "subtitles_present": {"type": "boolean"},
+            "issues": {"type": "array", "items": {"type": "string"}},
+            "notes": {"type": "string"},
+        },
+        "required": ["subtitles_present", "issues", "notes"],
+    }
 
     def detect_subtitles(self, video: Path) -> str:
         """Return where burned-in source subtitles sit: "bottom", "top" or "none"."""
@@ -48,7 +72,7 @@ class VisionQC:
             "burned-in subtitles (text overlaid on the picture by the uploader)? "
             "Ignore player UI. Reply JSON only: {\"position\": \"bottom\" | \"top\" | \"none\"}."
         )
-        result = self._chat_images(prompt, frames)
+        result = self._chat_images(prompt, frames, self._POSITION_SCHEMA)
         position = str(result.get("position", "none")).lower()
         return position if position in {"bottom", "top", "none"} else "none"
 
@@ -69,7 +93,7 @@ class VisionQC:
             "\"overlapping\" | ...], \"notes\": \"...\"}."
         )
         try:
-            result = self._chat_images(prompt, frames)
+            result = self._chat_images(prompt, frames, self._RENDER_SCHEMA)
         except Exception as e:
             return {"status": "error", "issues": [f"qc request failed: {e}"]}
         present = bool(result.get("subtitles_present", False))

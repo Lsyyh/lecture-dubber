@@ -18,8 +18,10 @@ for %%f in ("%MODEL_DIR%\mmproj-*.gguf") do set "MMPROJ=%%~ff"
 set "MMARGS="
 if defined MMPROJ set "MMARGS=--mmproj %MMPROJ%"
 echo Serving %MODEL% on http://127.0.0.1:8000/v1 (mmproj: %MMPROJ%)
+rem -np 1: llama.cpp b10795 shows cross-slot response mixing with Qwen3-VL under
+rem concurrent requests; the 2B model translates in ~0.5s/unit so parallelism is unnecessary.
 "%ROOT%\tools\llama-cpp\llama-server.exe" ^
   --host 127.0.0.1 --port 8000 ^
-  -m "%MODEL%" %MMARGS% -ngl 99 -c 16384 -np 4 --threads 8 ^
+  -m "%MODEL%" %MMARGS% -ngl 99 -c 16384 -np 1 --threads 8 ^
   --chat-template-kwargs "{\"enable_thinking\":false}"
 endlocal

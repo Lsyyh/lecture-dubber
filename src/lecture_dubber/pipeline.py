@@ -25,6 +25,10 @@ console = Console()
 _ALIGNMENT_CODES = {"bottom": 2, "top": 8}
 
 
+class PipelineCancelled(RuntimeError):
+    """Raised when a run is cancelled through its stop event."""
+
+
 class Pipeline:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -36,10 +40,15 @@ class Pipeline:
             stem = bilibili_cache_title(value) or Path(value).stem
         return self.cfg.work_dir / slugify(stem)
 
-    def run(self, value: str, job_dir: Path | None = None, resume: bool = True) -> Path:
+    def run(self, value: str, job_dir: Path | None = None, resume: bool = True,
+            stop_event: threading.Event | None = None) -> Path:
         job_dir = job_dir or self.job_dir_for(value)
         job_dir.mkdir(parents=True, exist_ok=True)
         state_path = job_dir / "state.json"
+
+        def check_stop() -> None:
+            if stop_event is not None and stop_event.is_set():
+                raise PipelineCancelled(str(job_dir))
 
         if resume and state_path.exists():
             state = JobState.model_validate(read_json(state_path))
@@ -105,6 +114,7 @@ class Pipeline:
                 unit.tts_path = str(fitted)
                 unit.tts_duration = probe_duration(fitted)
                 return
+            check_stop()
             while True:
                 tts.synthesize(unit.translation or unit.source, raw)
                 actual = probe_duration(raw)
@@ -124,7 +134,8 @@ class Pipeline:
         workers = max(1, min(self.cfg.translate_workers, len(pending) or 1))
         if workers > 1 and pending:
             console.print(f"[dim]{workers} parallel translation workers[/dim]")
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
             futures = {pool.submit(translator.translate, units[i], *context(i)): i for i in pending}
             # Synthesize units whose translations already exist (fresh jobs: none;
             # resumed jobs: all previously translated ones) while translations run.
@@ -133,12 +144,18 @@ class Pipeline:
                     continue
                 synthesize_unit(unit)
             for fut in as_completed(futures):
+                check_stop()
                 i = futures[fut]
                 units[i].translation = fut.result()
                 write_json(units_path, [u.model_dump() for u in units])
                 synthesize_unit(units[i])
+            pool.shutdown(wait=True)
+        except PipelineCancelled:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
 
         console.print("[bold]6/6 Compose + render[/bold]")
+        check_stop()
         subtitle = write_srt(units, job_dir / "zh.srt")
         total = probe_duration(video)
         timeline = compose_timeline([(u.start, Path(u.tts_path)) for u in units if u.tts_path], total, job_dir / "dub.wav")

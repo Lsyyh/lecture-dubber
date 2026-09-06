@@ -37,7 +37,7 @@ original_audio_gain_db: -24.0
 dub_audio_gain_db: 0.0
 render_preset: veryfast
 
-translate_workers: 4
+translate_workers: 1
 subtitle_alignment: auto
 qc_enabled: true
 qc_frames: 6
