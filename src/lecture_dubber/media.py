@@ -9,23 +9,45 @@ from .utils import ensure_command, run
 def extract_audio(video: Path, out_wav: Path) -> Path:
     ensure_command("ffmpeg")
     out_wav.parent.mkdir(parents=True, exist_ok=True)
-    run([
-        "ffmpeg", "-y", "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
-        "-c:a", "pcm_s16le", str(out_wav)
-    ])
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-c:a",
+            "pcm_s16le",
+            str(out_wav),
+        ]
+    )
     return out_wav
 
 
 def probe_duration(path: Path) -> float:
     ensure_command("ffprobe")
-    p = run([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(path)
-    ])
+    p = run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
+    )
     return float(p.stdout.strip())
 
 
-def fit_audio(in_wav: Path, out_wav: Path, target_duration: float, soft_min: float, soft_max: float) -> float:
+def fit_audio(
+    in_wav: Path, out_wav: Path, target_duration: float, soft_min: float, soft_max: float
+) -> float:
     out_wav.parent.mkdir(parents=True, exist_ok=True)
     actual = probe_duration(in_wav)
     if target_duration <= 0 or actual <= 0:
@@ -36,7 +58,17 @@ def fit_audio(in_wav: Path, out_wav: Path, target_duration: float, soft_min: flo
         if abs(speed - 1.0) < 0.015:
             out_wav.write_bytes(in_wav.read_bytes())
         else:
-            run(["ffmpeg", "-y", "-i", str(in_wav), "-filter:a", f"atempo={speed:.6f}", str(out_wav)])
+            run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(in_wav),
+                    "-filter:a",
+                    f"atempo={speed:.6f}",
+                    str(out_wav),
+                ]
+            )
         return speed
     out_wav.write_bytes(in_wav.read_bytes())
     return 1.0
@@ -55,7 +87,21 @@ def sample_frames(video: Path, count: int) -> list[Path]:
         t = total * (i + 0.5) / count
         out = out_dir / f"{video.stem}-{i:02d}.png"
         try:
-            run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1", str(out)])
+            run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-v",
+                    "error",
+                    "-ss",
+                    f"{t:.3f}",
+                    "-i",
+                    str(video),
+                    "-frames:v",
+                    "1",
+                    str(out),
+                ]
+            )
         except Exception:
             continue
         if out.exists():
@@ -63,7 +109,9 @@ def sample_frames(video: Path, count: int) -> list[Path]:
     return frames
 
 
-def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: float, out_wav: Path) -> Path:
+def compose_timeline(
+    segment_files: list[tuple[float, Path]], total_duration: float, out_wav: Path
+) -> Path:
     ensure_command("ffmpeg")
     out_wav.parent.mkdir(parents=True, exist_ok=True)
     if not segment_files:
@@ -79,7 +127,9 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
         label = f"a{i}"
         graph.append(f"[{i}:a]adelay={delay_ms}|{delay_ms}[{label}]")
         labels.append(f"[{label}]")
-    graph.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0,atrim=0:{total_duration:.3f}[mix]")
+    graph.append(
+        "".join(labels) + f"amix=inputs={len(labels)}:normalize=0,atrim=0:{total_duration:.3f}[mix]"
+    )
     graph_file = out_wav.parent / (out_wav.name + ".graph")
     graph_file.write_text(";\n".join(graph), encoding="utf-8")
     inputs: list[str] = []
@@ -87,8 +137,18 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
         inputs += ["-i", os.path.relpath(path, out_wav.parent)]
     try:
         run(
-            ["ffmpeg", "-y", *inputs, "-/filter_complex", graph_file.name,
-             "-map", "[mix]", "-ar", "48000", out_wav.name],
+            [
+                "ffmpeg",
+                "-y",
+                *inputs,
+                "-/filter_complex",
+                graph_file.name,
+                "-map",
+                "[mix]",
+                "-ar",
+                "48000",
+                out_wav.name,
+            ],
             cwd=out_wav.parent,
         )
     finally:
@@ -97,8 +157,13 @@ def compose_timeline(segment_files: list[tuple[float, Path]], total_duration: fl
 
 
 def render_video(
-    video: Path, dub_wav: Path, subtitle: Path | None, out_mp4: Path,
-    original_gain_db: float, dub_gain_db: float, subtitle_force_style: str | None = None,
+    video: Path,
+    dub_wav: Path,
+    subtitle: Path | None,
+    out_mp4: Path,
+    original_gain_db: float,
+    dub_gain_db: float,
+    subtitle_force_style: str | None = None,
     render_preset: str = "medium",
 ) -> Path:
     ensure_command("ffmpeg")
@@ -116,10 +181,27 @@ def render_video(
         video_map = "[vout]"
     else:
         video_map = "0:v"
-    cmd.extend([
-        "-filter_complex", ";".join(filter_parts),
-        "-map", video_map, "-map", "[aout]", "-c:v", "libx264", "-preset", render_preset,
-        "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-shortest", str(out_mp4)
-    ])
+    cmd.extend(
+        [
+            "-filter_complex",
+            ";".join(filter_parts),
+            "-map",
+            video_map,
+            "-map",
+            "[aout]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            render_preset,
+            "-crf",
+            "18",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            str(out_mp4),
+        ]
+    )
     run(cmd)
     return out_mp4

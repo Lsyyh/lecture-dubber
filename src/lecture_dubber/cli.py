@@ -39,6 +39,7 @@ def fetch(
 @app.command()
 def doctor(config: Path | None = typer.Option(Path("config.yaml"), "--config", "-c")):
     import shutil
+
     cfg = load_config(config if config and config.exists() else None)
     checks = {
         "ffmpeg": bool(shutil.which("ffmpeg")),
@@ -50,6 +51,7 @@ def doctor(config: Path | None = typer.Option(Path("config.yaml"), "--config", "
     }
     try:
         import whisperx  # noqa: F401
+
         checks["whisperx"] = True
     except Exception:
         checks["whisperx"] = False
@@ -68,4 +70,5 @@ def serve(
 
     cfg = load_config(config if config and config.exists() else None)
     from .webui import create_app
+
     uvicorn.run(create_app(cfg), host=host, port=port, log_level="info")

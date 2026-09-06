@@ -5,7 +5,9 @@ def _make_cache(folder, title="My Lecture"):
     (folder / "123-1-30032.m4s").write_bytes(b"000000000ftypvideo")
     (folder / "123-1-30280.m4s").write_bytes(b"000000000ftypaudio")
     (folder / "123-2-30032.m4s").write_bytes(b"000000000ftypvideo2")
-    (folder / "videoInfo.json").write_text(f'{{"title": "{title}", "bvid": "BV1xx"}}', encoding="utf-8")
+    (folder / "videoInfo.json").write_text(
+        f'{{"title": "{title}", "bvid": "BV1xx"}}', encoding="utf-8"
+    )
 
 
 def test_cache_pages_groups_by_page_and_kind(tmp_path):

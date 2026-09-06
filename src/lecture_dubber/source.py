@@ -74,10 +74,14 @@ def _import_bilibili_cache(folder: Path, job_dir: Path, cfg: Config) -> SourceIn
         raise RuntimeError(f"No video stream in bilibili cache: {folder}")
 
     title = _read_cache_title(folder) or folder.name
-    video = _copy_stripped(max(streams["video"], key=lambda t: t[0])[1], download_dir / f"page{page}_video.m4s")
+    video = _copy_stripped(
+        max(streams["video"], key=lambda t: t[0])[1], download_dir / f"page{page}_video.m4s"
+    )
     inputs = ["-i", str(video)]
     if streams["audio"]:
-        audio = _copy_stripped(max(streams["audio"], key=lambda t: t[0])[1], download_dir / f"page{page}_audio.m4s")
+        audio = _copy_stripped(
+            max(streams["audio"], key=lambda t: t[0])[1], download_dir / f"page{page}_audio.m4s"
+        )
         inputs += ["-i", str(audio)]
 
     out = download_dir / f"{slugify(title)[:80]}.mp4"
@@ -110,7 +114,9 @@ def import_source(value: str, job_dir: Path, cfg: Config) -> SourceInfo:
     try:
         import yt_dlp
     except ImportError as e:
-        raise RuntimeError("yt-dlp is not installed. Install the base package with: pip install -e .") from e
+        raise RuntimeError(
+            "yt-dlp is not installed. Install the base package with: pip install -e ."
+        ) from e
 
     download_dir = job_dir / "source"
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -140,7 +146,11 @@ def import_source(value: str, job_dir: Path, cfg: Config) -> SourceInfo:
         candidates.extend([prepared, prepared.with_suffix(".mp4"), prepared.with_suffix(".mkv")])
         video_path = next((p for p in candidates if p.exists()), None)
         if video_path is None:
-            media = [p for p in download_dir.iterdir() if p.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}]
+            media = [
+                p
+                for p in download_dir.iterdir()
+                if p.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}
+            ]
             if not media:
                 raise RuntimeError("yt-dlp finished but no downloaded media file was found")
             video_path = max(media, key=lambda p: p.stat().st_size)

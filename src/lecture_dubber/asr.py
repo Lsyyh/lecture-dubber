@@ -14,7 +14,9 @@ def transcribe_whisperx(audio_path: Path, cfg: Config) -> tuple[str, list[Segmen
         import torch
         import whisperx
     except ImportError as e:
-        raise RuntimeError("WhisperX not installed. Install the ASR environment with: pip install 'lecture-dubber[asr]'") from e
+        raise RuntimeError(
+            "WhisperX not installed. Install the ASR environment with: pip install 'lecture-dubber[asr]'"
+        ) from e
 
     model = whisperx.load_model(
         cfg.asr_model,
@@ -34,7 +36,11 @@ def transcribe_whisperx(audio_path: Path, cfg: Config) -> tuple[str, list[Segmen
         language_code=language, device=cfg.asr_device, model_name=cfg.asr_align_model
     )
     aligned = whisperx.align(
-        result["segments"], align_model, metadata, audio, cfg.asr_device,
+        result["segments"],
+        align_model,
+        metadata,
+        audio,
+        cfg.asr_device,
         return_char_alignments=False,
     )
     del align_model
@@ -45,11 +51,13 @@ def transcribe_whisperx(audio_path: Path, cfg: Config) -> tuple[str, list[Segmen
     segments: list[Segment] = []
     for i, seg in enumerate(aligned.get("segments", [])):
         words = [Word.model_validate(w) for w in seg.get("words", []) if w.get("word")]
-        segments.append(Segment(
-            id=i,
-            start=float(seg.get("start", 0.0)),
-            end=float(seg.get("end", 0.0)),
-            text=str(seg.get("text", "")).strip(),
-            words=words,
-        ))
+        segments.append(
+            Segment(
+                id=i,
+                start=float(seg.get("start", 0.0)),
+                end=float(seg.get("end", 0.0)),
+                text=str(seg.get("text", "")).strip(),
+                words=words,
+            )
+        )
     return language, segments

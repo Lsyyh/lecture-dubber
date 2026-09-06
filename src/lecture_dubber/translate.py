@@ -21,6 +21,7 @@ class OpenAICompatibleTranslator:
         self.glossary = glossary
         self.client = httpx.Client(timeout=180.0)
         import itertools
+
         self._seq = itertools.count()
 
     def _chat(self, messages: list[dict[str, str]], retries: int = 2) -> str:
@@ -82,19 +83,22 @@ class OpenAICompatibleTranslator:
             except (ValueError, RuntimeError) as e:
                 last_error = e
                 time.sleep(0.5 * (attempt + 1))
-        raise RuntimeError(f"unparseable LLM output after {attempts} attempts: {raw[:200]!r}") from last_error
-
+        raise RuntimeError(
+            f"unparseable LLM output after {attempts} attempts: {raw[:200]!r}"
+        ) from last_error
 
     def translate(self, unit: TranslationUnit, previous: str, next_text: str) -> str:
         glossary_text = "\n".join(f"- {k}: {v}" for k, v in self.glossary.items()) or "(none)"
         user = f"""Target language: Simplified Chinese
 Available speaking time: {unit.duration:.2f} seconds
-Previous context: {previous or '(none)'}
+Previous context: {previous or "(none)"}
 Current source: {unit.source}
-Next context: {next_text or '(none)'}
+Next context: {next_text or "(none)"}
 Glossary:\n{glossary_text}
 Translate only the current source. Keep it concise enough for dubbing."""
-        result = self._chat_json([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
+        result = self._chat_json(
+            [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+        )
         return str(result["translation"]).strip()
 
     def compress(self, unit: TranslationUnit, actual_duration: float) -> str:
@@ -104,5 +108,7 @@ Current translation: {unit.translation}
 Current spoken duration: {actual_duration:.2f} seconds
 Target duration: {unit.duration:.2f} seconds
 Rewrite the translation substantially more concisely without losing technical content. Return JSON only."""
-        result = self._chat_json([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
+        result = self._chat_json(
+            [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+        )
         return str(result["translation"]).strip()

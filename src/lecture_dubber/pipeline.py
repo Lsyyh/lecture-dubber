@@ -40,8 +40,13 @@ class Pipeline:
             stem = bilibili_cache_title(value) or Path(value).stem
         return self.cfg.work_dir / slugify(stem)
 
-    def run(self, value: str, job_dir: Path | None = None, resume: bool = True,
-            stop_event: threading.Event | None = None) -> Path:
+    def run(
+        self,
+        value: str,
+        job_dir: Path | None = None,
+        resume: bool = True,
+        stop_event: threading.Event | None = None,
+    ) -> Path:
         job_dir = job_dir or self.job_dir_for(value)
         job_dir.mkdir(parents=True, exist_ok=True)
         state_path = job_dir / "state.json"
@@ -93,7 +98,9 @@ class Pipeline:
         qc_thread: threading.Thread | None = None
         qc_result: dict[str, str] = {}
         if self.cfg.qc_enabled and self.cfg.subtitle_alignment == "auto":
-            qc_thread = threading.Thread(target=self._detect_hardsubs, args=(video, qc_result), daemon=True)
+            qc_thread = threading.Thread(
+                target=self._detect_hardsubs, args=(video, qc_result), daemon=True
+            )
             qc_thread.start()
 
         console.print("[bold]4-5/6 Translate + synthesize (overlapped)[/bold]")
@@ -119,12 +126,21 @@ class Pipeline:
                 tts.synthesize(unit.translation or unit.source, raw)
                 actual = probe_duration(raw)
                 ratio = actual / max(unit.duration, 0.01)
-                if ratio > self.cfg.duration_rewrite_threshold and unit.attempts < self.cfg.max_rewrite_attempts:
+                if (
+                    ratio > self.cfg.duration_rewrite_threshold
+                    and unit.attempts < self.cfg.max_rewrite_attempts
+                ):
                     unit.translation = translator.compress(unit, actual)
                     unit.attempts += 1
                     write_json(units_path, [u.model_dump() for u in units])
                     continue
-                unit.speed = fit_audio(raw, fitted, unit.duration, self.cfg.duration_soft_min, self.cfg.duration_soft_max)
+                unit.speed = fit_audio(
+                    raw,
+                    fitted,
+                    unit.duration,
+                    self.cfg.duration_soft_min,
+                    self.cfg.duration_soft_max,
+                )
                 unit.tts_path = str(fitted)
                 unit.tts_duration = probe_duration(fitted)
                 break
@@ -158,7 +174,9 @@ class Pipeline:
         check_stop()
         subtitle = write_srt(units, job_dir / "zh.srt")
         total = probe_duration(video)
-        timeline = compose_timeline([(u.start, Path(u.tts_path)) for u in units if u.tts_path], total, job_dir / "dub.wav")
+        timeline = compose_timeline(
+            [(u.start, Path(u.tts_path)) for u in units if u.tts_path], total, job_dir / "dub.wav"
+        )
         alignment = self.cfg.subtitle_alignment
         if qc_thread is not None:
             qc_thread.join(timeout=180)
@@ -167,8 +185,12 @@ class Pipeline:
             alignment = qc_result.get("alignment", "bottom")
         alignment_code = _ALIGNMENT_CODES.get(alignment, 2)
         final = render_video(
-            video, timeline, subtitle, job_dir / "final.zh.mp4",
-            self.cfg.original_audio_gain_db, self.cfg.dub_audio_gain_db,
+            video,
+            timeline,
+            subtitle,
+            job_dir / "final.zh.mp4",
+            self.cfg.original_audio_gain_db,
+            self.cfg.dub_audio_gain_db,
             subtitle_force_style=f"Alignment={alignment_code}",
             render_preset=self.cfg.render_preset,
         )

@@ -5,6 +5,7 @@ which were removed from torchaudio 2.9 in favor of torchcodec (not available on 
 deployment). Backfill the removed APIs with soundfile-based equivalents so the bundled
 WhisperX VAD keeps working. Call ensure_torchaudio_compat() before importing whisperx.
 """
+
 from __future__ import annotations
 
 from collections import namedtuple

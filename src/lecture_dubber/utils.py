@@ -17,7 +17,7 @@ def _join_cmdline(cmd: list[str]) -> str:
     parts: list[str] = []
     for arg in cmd:
         if _CMD_META.search(arg):
-            escaped = arg.replace('"', r'\"')
+            escaped = arg.replace('"', r"\"")
             parts.append(f'"{escaped}"')
         else:
             parts.append(arg)
@@ -31,7 +31,9 @@ def ensure_command(name: str) -> str:
     return path
 
 
-def run(cmd: list[str], *, check: bool = True, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str], *, check: bool = True, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         _join_cmdline(cmd), check=check, text=True, capture_output=True, errors="replace", cwd=cwd
     )

@@ -16,12 +16,14 @@ def merge_segments(segments: list[Segment], cfg: Config) -> list[TranslationUnit
     def flush() -> None:
         if not current:
             return
-        units.append(TranslationUnit(
-            id=len(units),
-            start=current[0].start,
-            end=current[-1].end,
-            source=" ".join(s.text.strip() for s in current if s.text.strip()).strip(),
-        ))
+        units.append(
+            TranslationUnit(
+                id=len(units),
+                start=current[0].start,
+                end=current[-1].end,
+                source=" ".join(s.text.strip() for s in current if s.text.strip()).strip(),
+            )
+        )
         current.clear()
 
     for seg in segments:
