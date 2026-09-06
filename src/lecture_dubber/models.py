@@ -117,3 +117,15 @@ class Config(BaseModel):
     qc_frames: int = 6
     # Delete tts/, source/*.m4s and dub.wav after a successful render.
     cleanup_intermediates: bool = True
+
+    # Realtime mode: the target process's session volume is lowered to this
+    # level while capturing (the loopback tap samples post-volume, so muting
+    # would kill the signal; the capture instead applies 1/this gain).
+    realtime_duck_volume: float = 0.08
+    # Realtime mode ASR: a smaller model than the offline one leaves GPU room
+    # for TTS sharing the device during a live session.
+    realtime_asr_model: str = "pretrained_models/faster-whisper-medium"
+    # 'piper' (CPU, RTF ~0.05) keeps dub production ahead of the source;
+    # 'cosyvoice' sounds better but sustains RTF ~1 on one GPU.
+    realtime_tts_backend: str = "piper"
+    realtime_tts_model: str = "pretrained_models/piper/zh_CN-huayan-medium.onnx"

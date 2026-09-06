@@ -119,6 +119,23 @@ Re-running the same job resumes from `segments.json`, `units.json`, and complete
 dubber run VIDEO_OR_URL -o outputs/cs229-l01 --no-resume
 ```
 
+### Real-time interpretation (Web UI)
+
+```bash
+dubber serve            # open http://127.0.0.1:8010
+```
+
+The landing page offers two modes. **Real-time** lists the processes that are
+currently playing audio; pick one (e.g. an English livestream running in the
+background) and the system captures its loopback, lowers its volume to a
+whisper, and speaks a live Mandarin interpretation: streaming ASR -> clause
+segmentation -> incremental translation -> Piper TTS. No video download or
+processing involved. Session traces land in `outputs/realtime/<ts>/`.
+Requires the `realtime` extras (`pip install -e '.[realtime]'`) and the local
+Qwen server for translation.
+
+**Offline** is the full dubbing pipeline described below.
+
 ## Job directory
 
 ```text

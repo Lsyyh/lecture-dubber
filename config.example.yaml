@@ -54,3 +54,13 @@ qc_enabled: true
 qc_frames: 6
 # Delete tts/, source/*.m4s and dub.wav after a successful render.
 cleanup_intermediates: true
+
+# Realtime mode: lower the captured process's session volume to this fraction
+# while interpreting (capture gain compensates); restore when stopped.
+realtime_duck_volume: 0.08
+# Realtime mode ASR model; a smaller model than asr_model leaves GPU room for TTS.
+realtime_asr_model: pretrained_models/faster-whisper-medium
+# Realtime TTS: 'piper' is fast (CPU, RTF ~0.05) - recommended for live mode;
+# 'cosyvoice' uses the offline model and sounds better but sustains RTF ~1.
+realtime_tts_backend: piper
+realtime_tts_model: pretrained_models/piper/zh_CN-huayan-medium.onnx

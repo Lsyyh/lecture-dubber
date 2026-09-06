@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 asr = ["whisperx>=3.3"]
 tts = ["soundfile>=0.12", "numpy>=1.26"]
+realtime = ["proc-tap>=1.1", "SoundCard>=0.4", "pycaw>=20240210", "psutil>=5.9", "piper-tts>=1.8"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>实时同传 - lecture-dubber</title>
+<style>
+  body { font-family:"Segoe UI", system-ui, sans-serif; background:#f4f6f9; margin:0; color:#1c2733; }
+  .wrap { max-width:860px; margin:24px auto; padding:0 16px; }
+  .top { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .top a { color:#2563eb; text-decoration:none; font-size:14px; }
+  h1 { font-size:20px; margin:0; }
+  .card { background:#fff; border:1px solid #e3e9f0; border-radius:14px; padding:18px 20px; margin-bottom:16px; }
+  .muted { color:#68788c; font-size:13px; }
+  .procs { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  .proc { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid #e3e9f0;
+          border-radius:10px; cursor:pointer; }
+  .proc:hover { background:#f0f6ff; border-color:#b6d4fe; }
+  .proc.active { background:#e8f5e9; border-color:#a5d6a7; cursor:default; }
+  .proc .name { font-weight:600; }
+  .proc .pid { color:#8b98a8; font-size:12px; }
+  .proc .vol { margin-left:auto; color:#8b98a8; font-size:12px; }
+  button { border:0; border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer;
+           background:#2563eb; color:#fff; }
+  button:disabled { background:#9db8d9; cursor:default; }
+  button.ghost { background:#eef2f6; color:#1c2733; }
+  button.stop { background:#dc3545; }
+  .stat { display:flex; gap:22px; flex-wrap:wrap; margin:8px 0; font-size:14px; }
+  .stat b { font-size:16px; }
+  .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .badge.live { background:#e8f5e9; color:#1b5e20; }
+  .badge.warn { background:#fff3e0; color:#b26a00; }
+  .badge.err { background:#fdecea; color:#b71c1c; }
+  .badge.load { background:#e3f2fd; color:#0d47a1; }
+  #partial { background:#f8fafc; border:1px dashed #cfd9e3; border-radius:8px;
+             padding:10px 12px; min-height:20px; font-size:13px; color:#51606f; }
+  .clauses { margin-top:10px; max-height:420px; overflow-y:auto; }
+  .clause { padding:8px 0; border-bottom:1px solid #f0f3f7; font-size:14px; }
+  .clause .en { color:#68788c; }
+  .clause .zh { display:block; margin-top:2px; }
+  .hint { font-size:12.5px; color:#68788c; line-height:1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a href="/">← 返回</a><h1>实时同传</h1></div>
+
+  <div class="card" id="pickcard">
+    <b>1. 选择要同传的程序</b>
+    <div class="hint" style="margin-top:6px">
+      下面列出当前正在播放声音的程序。选中后，它将作为英文声音来源；
+      我们会把它的系统音量调低到耳语水平（结束自动恢复），并实时播出中文配音。
+      保持它在后台播放即可，无需置顶。
+    </div>
+    <div class="procs" id="procs"><div class="muted">加载中…</div></div>
+    <div style="margin-top:14px; display:flex; gap:10px; align-items:center">
+      <button id="start" disabled>2. 开始实时同传</button>
+      <label class="muted"><input type="checkbox" id="duck" checked> 降低原声音量（推荐）</label>
+      <span class="muted" id="msg"></span>
+    </div>
+  </div>
+
+  <div class="card" id="livecard" style="display:none">
+    <div style="display:flex; align-items:center; gap:10px">
+      <b id="tname"></b><span class="badge load" id="phase"></span>
+      <button class="stop" id="stop" style="margin-left:auto">停止</button>
+    </div>
+    <div class="stat">
+      <span>延迟 <b id="lag">0.0</b>s</span>
+      <span>模式 <b id="mode">NORMAL</b></span>
+      <span>TTS 速度 <b id="speed">1.00</b>x</span>
+      <span>子句 <b id="ncl">0</b></span>
+      <span>配音 <b id="ndub">0</b></span>
+      <span class="muted" id="err"></span>
+    </div>
+    <div id="partial"></div>
+    <div class="clauses" id="clauses"></div>
+  </div>
+</div>
+
+<script>
+let picked = null, timer = null;
+const $ = id => document.getElementById(id);
+
+async function api(p, opts) {
+  const r = await fetch(p, opts);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+async function loadProcs() {
+  let procs = [];
+  try { procs = await api("/api/realtime/processes"); } catch (e) { $("msg").textContent = "枚举失败: " + e.message; }
+  const box = $("procs"); box.innerHTML = "";
+  if (!procs.length) {
+    box.innerHTML = '<div class="muted">没有找到正在播放声音的程序 —— 先让英文视频/直播出声，再刷新。</div>';
+  }
+  for (const p of procs) {
+    const div = document.createElement("div");
+    div.className = "proc" + (p.active ? " active" : "");
+    div.innerHTML = `<span class="name">${p.name}</span><span class="pid">pid ${p.pid}</span>
+      <span class="vol">音量 ${Math.round(p.volume * 100)}%${p.muted ? " (已静音)" : ""}</span>`;
+    if (!p.active) div.onclick = () => { picked = p; $("start").disabled = false;
+      [...box.children].forEach(c => c.classList.remove("active")); div.classList.add("active"); };
+    else box.querySelector && div.insertAdjacentHTML("beforeend", "");
+    box.appendChild(div);
+  }
+  if (procs.some(p => p.active)) picked = procs.find(p => p.active) || null;
+}
+loadProcs();
+setInterval(() => { const s = $("livecard").style.display; if (s === "none") loadProcs(); }, 5000);
+
+$("start").onclick = async () => {
+  if (!picked) return;
+  $("start").disabled = true;
+  try {
+    await api("/api/realtime/start", { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ pid: picked.pid, duck_original: $("duck").checked }) });
+    $("msg").textContent = "";
+    $("pickcard").style.display = "none";
+    $("livecard").style.display = "block";
+    poll();
+  } catch (e) { $("msg").textContent = "启动失败：" + e.message; $("start").disabled = false; }
+};
+
+$("stop").onclick = async () => { try { await api("/api/realtime/stop", {method:"POST"}); } catch (e) {} };
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+async function poll() {
+  clearTimeout(timer);
+  let st;
+  try { st = await api("/api/realtime/status"); } catch (e) { return setTimeout(poll, 2000); }
+
+  const showLive = st.running || st.phase === "stopping" || (st.clauses && st.clauses.length);
+  if (st.phase === "idle" || (!st.running && st.phase === "done" && !$("livecard").style.display)) {
+    // session fully stopped and user never started one in this page view
+    if (!$("livecard").style.display || $("livecard").style.display === "none") {
+      $("pickcard").style.display = "block"; return loadProcs();
+    }
+  }
+  $("livecard").style.display = showLive ? "block" : $("livecard").style.display;
+  $("pickcard").style.display = showLive ? "none" : $("pickcard").style.display;
+
+  if (showLive) {
+    $("tname").textContent = st.target_name || "";
+    const cls = { live: "live", loading: "load", stopping: "warn", error: "err", done: "warn" };
+    $("phase").textContent = { loading: "加载模型…", live: "同传中", stopping: "停止中…",
+                               error: "出错", done: "已结束" }[st.phase] || st.phase;
+    $("phase").className = "badge " + (cls[st.phase] || "warn");
+    $("lag").textContent = st.lag_s ?? 0;
+    $("mode").textContent = st.mode || "NORMAL";
+    $("speed").textContent = (st.tts_speed ?? 1).toFixed(2);
+    $("ncl").textContent = st.counters?.clauses ?? 0;
+    $("ndub").textContent = st.counters?.dubbed ?? 0;
+    $("err").textContent = st.error ? ("错误: " + st.error) : "";
+    $("partial").innerHTML = "<b>识别中：</b> " + esc(st.partial_text || "（等待声音…）");
+
+    const box = $("clauses");
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.innerHTML = "";
+    for (const c of (st.clauses || []).slice().reverse()) {
+      const d = document.createElement("div");
+      d.className = "clause";
+      d.innerHTML = `<span class="en">${esc(c.source)}</span><span class="zh">${esc(c.zh || "…")}</span>`;
+      box.appendChild(d);
+    }
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  }
+  if (st.phase === "error" || st.phase === "done") { loadProcs(); return setTimeout(poll, 3000); }
+  timer = setTimeout(poll, 1000);
+}
+poll();
+</script>
+</body>
+</html>

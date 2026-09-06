@@ -35,5 +35,6 @@ def test_status_done_and_missing_job(tmp_path):
     st = job_status(cfg, "my-job")
     assert st["stage"] == "done" and st["final_ready"]
     import pytest
+
     with pytest.raises(FileNotFoundError):
         job_status(cfg, "nope")

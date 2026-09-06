@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 
 from ._torchaudio_compat import ensure_torchaudio_compat
@@ -70,25 +71,40 @@ class CosyVoiceTTS:
         speech = torch.from_numpy(data).reshape(1, -1)
         return torchaudio.functional.resample(speech, sr, 16000)
 
-    def synthesize(self, text: str, out_wav: Path, speed: float = 1.0) -> Path:
+    def synthesize_array(self, text: str, speed: float = 1.0) -> tuple[np.ndarray, int]:
+        """Synthesize to an in-memory float32 mono numpy array. Returns (pcm, sr)."""
+        import torch
+
         text = spoken_form(text)
-        out_wav.parent.mkdir(parents=True, exist_ok=True)
         if self.use_zero_shot:
-            chunks = list(self.model.inference_zero_shot(
-                text, self.cfg.cosyvoice_prompt_text, self.prompt_speech, stream=False, speed=speed,
-            ))
+            chunks = list(
+                self.model.inference_zero_shot(
+                    text,
+                    self.cfg.cosyvoice_prompt_text,
+                    self.prompt_speech,
+                    stream=False,
+                    speed=speed,
+                )
+            )
         else:
-            chunks = list(self.model.inference_sft(
-                text,
-                self.cfg.cosyvoice_speaker,
-                stream=False,
-                speed=speed,
-            ))
+            chunks = list(
+                self.model.inference_sft(
+                    text,
+                    self.cfg.cosyvoice_speaker,
+                    stream=False,
+                    speed=speed,
+                )
+            )
         if not chunks:
             raise RuntimeError("CosyVoice returned no audio")
-        import torch
         speech = torch.cat([x["tts_speech"] for x in chunks], dim=1)
+        pcm = speech.reshape(-1).to(torch.float32).cpu().numpy()
+        return pcm, self.model.sample_rate
+
+    def synthesize(self, text: str, out_wav: Path, speed: float = 1.0) -> Path:
+        pcm, sr = self.synthesize_array(text, speed)
+        out_wav.parent.mkdir(parents=True, exist_ok=True)
         # soundfile instead of torchaudio.save: torchaudio >= 2.9 needs torchcodec for wav writes,
         # which is unavailable in this deployment.
-        sf.write(str(out_wav), speech.reshape(-1).to(torch.float32).cpu().numpy(), self.model.sample_rate)
+        sf.write(str(out_wav), pcm, sr)
         return out_wav

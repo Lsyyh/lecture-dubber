@@ -5,6 +5,7 @@ the translator) inspects sampled video frames. Before rendering it detects
 burned-in source subtitles so our subtitles can avoid them; after rendering it
 verifies the Chinese subtitles were burned correctly.
 """
+
 from __future__ import annotations
 
 import base64
@@ -27,7 +28,9 @@ class VisionQC:
         content: list[dict] = [{"type": "text", "text": prompt}]
         for image in images:
             b64 = base64.b64encode(image.read_bytes()).decode()
-            content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+            content.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+            )
         payload = {
             "model": "qc",
             "messages": [{"role": "user", "content": content}],
@@ -41,8 +44,14 @@ class VisionQC:
         }
         url = self.cfg.llm_base_url.rstrip("/") + "/chat/completions"
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        r = self.client.post(url, content=body, headers={"Authorization": f"Bearer {self.cfg.llm_api_key}",
-                                                         "Content-Type": "application/json"})
+        r = self.client.post(
+            url,
+            content=body,
+            headers={
+                "Authorization": f"Bearer {self.cfg.llm_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
         r.raise_for_status()
         raw = r.json()["choices"][0]["message"]["content"]
         return extract_json(raw)
@@ -70,7 +79,7 @@ class VisionQC:
         prompt = (
             "These are frames sampled from one lecture video. Does the video show "
             "burned-in subtitles (text overlaid on the picture by the uploader)? "
-            "Ignore player UI. Reply JSON only: {\"position\": \"bottom\" | \"top\" | \"none\"}."
+            'Ignore player UI. Reply JSON only: {"position": "bottom" | "top" | "none"}.'
         )
         result = self._chat_images(prompt, frames, self._POSITION_SCHEMA)
         position = str(result.get("position", "none")).lower()
@@ -87,10 +96,10 @@ class VisionQC:
             "lines where no subtitle is expected - that is normal. Check the frames "
             "for: (1) at least some frames show Chinese subtitle text, (2) the "
             "subtitles are readable (no garbled characters, no blocking boxes, not "
-            "overlapping other on-screen text badly). Report \"missing\" only if "
+            'overlapping other on-screen text badly). Report "missing" only if '
             "NO frame shows any subtitle. Reply JSON only: "
-            "{\"subtitles_present\": true/false, \"issues\": [\"garbled\" | \"missing\" | "
-            "\"overlapping\" | ...], \"notes\": \"...\"}."
+            '{"subtitles_present": true/false, "issues": ["garbled" | "missing" | '
+            '"overlapping" | ...], "notes": "..."}.'
         )
         try:
             result = self._chat_images(prompt, frames, self._RENDER_SCHEMA)

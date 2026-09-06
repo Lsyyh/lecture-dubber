@@ -5,6 +5,7 @@ from the on-disk resume artifacts (units.json, state.json, final.zh.mp4), so it
 stays consistent with CLI runs and needs no extra bookkeeping. Only one job
 runs at a time (single GPU); further requests are rejected while busy.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,8 +29,22 @@ _NAME_RE = re.compile(r"[\w\-.]+")
 _UNIT_RE = re.compile(r"\d+")
 
 
+def _process_name(pid: int) -> str:
+    try:
+        import psutil
+
+        return psutil.Process(pid).name()
+    except Exception:
+        return f"pid {pid}"
+
+
 class StartBody(BaseModel):
     source: str
+
+
+class RealtimeStartBody(BaseModel):
+    pid: int
+    duck_original: bool = True
 
 
 @dataclass
@@ -38,6 +53,58 @@ class RunningJob:
     thread: threading.Thread
     stop_event: threading.Event
     error: str | None = None
+
+
+class RealtimeManager:
+    """Single live realtime session (one GPU, one capture target)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._session = None
+
+    @property
+    def session(self):
+        with self._lock:
+            return self._session
+
+    def start(self, cfg: Config, pid: int, name: str, duck_original: bool) -> None:
+        from .glossary import load_glossary
+        from .realtime_pipeline import RealtimeSession
+
+        with self._lock:
+            if self._session is not None and self._session.phase in ("loading", "live"):
+                raise RuntimeError("a realtime session is already running")
+            session = RealtimeSession(
+                cfg,
+                load_glossary(cfg.glossary_path),
+                pid,
+                name,
+                duck_original=duck_original,
+            )
+            self._session = session
+
+        def target() -> None:
+            try:
+                session.start()
+            except Exception as e:
+                session.phase = "error"
+                session.error = str(e)
+
+        threading.Thread(target=target, daemon=True).start()
+
+    def stop(self) -> None:
+        session = self.session
+        if session is not None and session.phase in ("loading", "live"):
+            threading.Thread(target=session.stop, daemon=True).start()
+
+    def snapshot(self) -> dict:
+        session = self.session
+        if session is None:
+            return {"running": False, "phase": "idle"}
+        snap = session.snapshot()
+        if session.phase == "error":
+            snap["running"] = False
+        return snap
 
 
 class JobRegistry:
@@ -120,8 +187,12 @@ def job_status(cfg: Config, name: str, registry: JobRegistry | None = None) -> d
     else:
         stage = "synthesizing"
 
-    running = bool(registry and registry.current() and registry.current().name == name
-                   and registry.current().thread.is_alive())
+    running = bool(
+        registry
+        and registry.current()
+        and registry.current().name == name
+        and registry.current().thread.is_alive()
+    )
     error = None
     if registry and registry.current() and registry.current().name == name:
         error = registry.current().error
@@ -149,12 +220,60 @@ def create_app(cfg: Config) -> object:
 
     static_dir = Path(__file__).parent / "static"
     registry = JobRegistry()
+    realtime = RealtimeManager()
 
     app = FastAPI(title="lecture-dubber")
 
     @app.get("/")
     def index():
         return FileResponse(static_dir / "index.html")
+
+    @app.get("/offline")
+    def offline():
+        return FileResponse(static_dir / "offline.html")
+
+    @app.get("/realtime")
+    def realtime_page():
+        return FileResponse(static_dir / "realtime.html")
+
+    @app.get("/api/realtime/processes")
+    def realtime_processes() -> list[dict]:
+        from .realtime_capture import list_audio_processes
+
+        try:
+            procs = list_audio_processes()
+        except Exception as e:
+            raise HTTPException(500, f"audio session enumeration failed: {e}") from e
+        snap = realtime.snapshot()
+        for p in procs:
+            p["active"] = snap.get("running") and p["pid"] == snap.get("target_pid")
+        return procs
+
+    @app.post("/api/realtime/start")
+    def realtime_start(body: RealtimeStartBody) -> dict:
+        procs_ok = False
+        try:
+            from .realtime_capture import get_session_volume
+
+            procs_ok = get_session_volume(body.pid) is not None
+        except Exception:
+            procs_ok = False
+        if not procs_ok:
+            raise HTTPException(404, "target process has no active audio session")
+        try:
+            realtime.start(cfg, body.pid, _process_name(body.pid), body.duck_original)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e)) from e
+        return {"started": True}
+
+    @app.get("/api/realtime/status")
+    def realtime_status() -> dict:
+        return realtime.snapshot()
+
+    @app.post("/api/realtime/stop")
+    def realtime_stop() -> dict:
+        realtime.stop()
+        return {"stopping": True}
 
     @app.get("/api/health")
     def health() -> dict:
@@ -241,7 +360,9 @@ def create_app(cfg: Config) -> object:
                     f.seek(start)
                     data = f.read(end - start + 1)
                 return Response(
-                    content=data, media_type=media_type, status_code=206,
+                    content=data,
+                    media_type=media_type,
+                    status_code=206,
                     headers={
                         "Content-Range": f"bytes {start}-{end}/{file_size}",
                         "Accept-Ranges": "bytes",

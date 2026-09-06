@@ -1,256 +1,42 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lecture-dubber</title>
 <style>
-  :root {
-    --bg: #f6f7f9; --card: #ffffff; --line: #e4e7ec; --text: #1a2230;
-    --muted: #667085; --accent: #3b6ef5; --ok: #12b76a; --warn: #f79009; --err: #d92d20;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-          padding: 18px; margin-bottom: 16px; }
-  .row { display: flex; gap: 10px; }
-  input[type=text] { flex: 1; padding: 10px 12px; border: 1px solid var(--line);
-                     border-radius: 8px; font-size: 14px; }
-  button { padding: 10px 18px; border: 0; border-radius: 8px; background: var(--accent);
-           color: #fff; font-size: 14px; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-  button.ghost { background: transparent; color: var(--err); border: 1px solid var(--line); }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
-           font-size: 12px; background: var(--line); color: var(--muted); }
-  .badge.running { background: #e0eaff; color: var(--accent); }
-  .badge.done { background: #d6f5e6; color: var(--ok); }
-  .badge.err { background: #fde8e8; color: var(--err); }
-  .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
-  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .5s; }
-  .stats { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin: 10px 0; }
-  .units { max-height: 320px; overflow-y: auto; border-top: 1px solid var(--line); }
-  .unit { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px;
-          border-bottom: 1px solid var(--line); font-size: 13px; }
-  .unit .t { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .unit .en { color: var(--muted); flex: 1; }
-  .unit .zh { flex: 1.4; }
-  .play { border: 1px solid var(--line); background: #fff; color: var(--accent);
-          border-radius: 6px; padding: 2px 10px; font-size: 12px; }
-  .play.ready { border-color: var(--accent); }
-  video { width: 100%; border-radius: 8px; background: #000; }
-  .joblist .job { display: flex; justify-content: space-between; align-items: center;
-                  padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  .joblist .job:hover { background: #f0f4ff; }
-  .muted { color: var(--muted); font-size: 13px; }
-  a { color: var(--accent); }
+  body { font-family: "Segoe UI", system-ui, sans-serif; background:#f4f6f9; margin:0;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .wrap { text-align:center; }
+  h1 { font-size:28px; color:#1c2733; margin-bottom:6px; }
+  .sub { color:#68788c; margin-bottom:36px; }
+  .modes { display:flex; gap:24px; justify-content:center; }
+  a.card { display:block; width:300px; padding:28px 24px; background:#fff; border-radius:14px;
+           text-decoration:none; color:inherit; border:1px solid #e3e9f0; text-align:left;
+           transition: box-shadow .15s, transform .15s; }
+  a.card:hover { box-shadow:0 8px 24px rgba(30,60,100,.12); transform:translateY(-2px); }
+  .icon { font-size:34px; }
+  a.card h2 { margin:12px 0 8px; font-size:19px; color:#15324f; }
+  a.card p { margin:0; color:#68788c; font-size:14px; line-height:1.6; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>lecture-dubber <span class="badge" id="llm">LLM</span></h1>
-  <div class="sub">本地讲座视频英→中配音：本地文件 / B 站缓存目录 / yt-dlp 链接</div>
-
-  <div class="card">
-    <div class="row">
-      <input type="text" id="src" placeholder="例如：C:\Users\you\Videos\bilibili\25975918879 或 D:\video\lecture.mp4">
-      <button id="start">开始配音</button>
+  <div class="wrap">
+    <h1>lecture-dubber</h1>
+    <div class="sub">本地讲座视频英→中配音 &amp; 实时同传</div>
+    <div class="modes">
+      <a class="card" href="/realtime">
+        <div class="icon">🎧</div>
+        <h2>实时同传</h2>
+        <p>选择一个正在播放英文声音的程序（如后台挂着的直播/视频），
+           实时输出中文配音。无需下载视频、无需等待处理。</p>
+      </a>
+      <a class="card" href="/offline">
+        <div class="icon">🎬</div>
+        <h2>离线配音</h2>
+        <p>输入本地视频 / B 站缓存目录 / 视频链接，
+           完整处理为中文配音视频（WhisperX → 翻译 → TTS → 渲染）。</p>
+      </a>
     </div>
-    <div class="muted" id="msg" style="margin-top:8px"></div>
   </div>
-
-  <div class="card" id="active" style="display:none">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <b id="aname"></b><span class="badge running" id="astage"></span>
-    </div>
-    <div class="stats">
-      <span>翻译 <b id="tr">0</b>/<b id="tt">0</b></span>
-      <span>合成 <b id="sy">0</b>/<b id="tt2">0</b></span>
-      <span id="qcinfo"></span>
-    </div>
-    <div class="bar"><div id="pbar"></div></div>
-    <div id="livebox" style="margin-top:12px">
-      <button id="livestart">▶ 实时预览（看原视频 + 实时配音）</button>
-      <span class="muted" id="livestat" style="margin-left:10px"></span>
-      <video id="livevideo" controls style="width:100%;margin-top:8px;border-radius:8px;background:#000;display:none"></video>
-      <div class="muted" style="margin-top:6px">原声已调低垫在配音下；追不上的单元会静音跳过，成片不受影响。</div>
-    </div>
-    <div style="margin-top:12px"><button class="ghost" id="cancel">取消</button></div>
-    <div class="units" id="units"></div>
-  </div>
-
-  <div class="card" id="donecard" style="display:none">
-    <b id="dname"></b> <a id="srtlink" href="#">下载字幕</a>
-    <div style="margin-top:10px"><video id="player" controls></video></div>
-  </div>
-
-  <div class="card joblist">
-    <b>任务记录</b>
-    <div id="jobs"></div>
-  </div>
-</div>
-
-<script>
-let current = localStorage.getItem("current") || "";
-let timer = null;
-const $ = id => document.getElementById(id);
-
-async function api(path, opts) {
-  const r = await fetch(path, opts);
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
-  return r.json();
-}
-
-$("start").onclick = async () => {
-  const source = $("src").value.trim();
-  if (!source) return;
-  $("start").disabled = true;
-  try {
-    const res = await api("/api/jobs", { method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({source}) });
-    current = res.name; localStorage.setItem("current", current);
-    $("msg").textContent = ""; poll();
-  } catch (e) { $("msg").textContent = "启动失败：" + e.message; }
-  $("start").disabled = false;
-};
-
-$("cancel").onclick = async () => {
-  try { await api(`/api/jobs/${current}/cancel`, {method: "POST"}); } catch (e) {}
-};
-
-function fmt(s) { const m = Math.floor(s/60), r = (s%60).toFixed(1); return `${m}:${r.padStart(4,"0")}`; }
-
-// ---- live preview: original video + dub scheduled on an audio timeline ----
-const live = { ctx: null, job: "", on: false, scheduled: new Set(), sources: [],
-               buffering: false, skipped: 0 };
-
-$("livestart").onclick = () => {
-  if (!live.ctx) live.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  live.ctx.resume();
-  live.job = current; live.on = true;
-  live.scheduled = new Set(); live.sources = []; live.skipped = 0;
-  const v = $("livevideo");
-  v.src = `/api/jobs/${current}/source_video`;
-  v.volume = 0.08;               // original audio low, dub on top
-  v.style.display = "block";
-  $("livestart").style.display = "none";
-  v.onseeked = () => { stopAllSources(); live.scheduled = new Set(); };
-  v.play();
-  poll();
-};
-
-function stopAllSources() {
-  for (const s of live.sources) { try { s.stop(); } catch (e) {} }
-  live.sources = [];
-}
-
-function scheduleLive(units) {
-  if (!live.on) return;
-  const v = $("livevideo");
-  const t = v.currentTime;
-  let frontier = t;
-  for (const u of units) {
-    if (u.audio_ready) frontier = Math.max(frontier, u.end);
-    if (live.scheduled.has(u.id) || !u.audio_ready) continue;
-    live.scheduled.add(u.id);
-    const late = t - u.start;
-    if (late > 3) { live.skipped++; continue; }   // playback already passed: skip
-    fetch(`/api/jobs/${live.job}/audio/${u.id}`)
-      .then(r => r.arrayBuffer())
-      .then(buf => live.ctx.decodeAudioData(buf))
-      .then(audio => {
-        const at = Math.max(live.ctx.currentTime + 0.05, live.ctx.currentTime + (u.start - v.currentTime));
-        const src = live.ctx.createBufferSource();
-        src.buffer = audio; src.connect(live.ctx.destination);
-        src.start(at);
-        live.sources.push(src);
-      });
-  }
-  // buffer management: dubbing frontier must stay ahead of the playhead
-  const lead = frontier - t;
-  $("livestat").textContent = `合成领先 ${lead.toFixed(0)} 秒` +
-      (live.skipped ? ` · 已跳过 ${live.skipped} 段` : "");
-  if (!live.buffering && lead < 4 && !v.paused && !v.ended) {
-    live.buffering = true; v.pause(); $("livestat").textContent += " · 缓冲中…";
-  } else if (live.buffering && (lead > 12 || v.ended)) {
-    live.buffering = false; v.play();
-  }
-  // job finished while previewing
-  if (v.ended) { live.on = false; stopAllSources(); }
-}
-
-function renderUnits(units, selected) {
-  $("units").innerHTML = "";
-  for (const u of units) {
-    const div = document.createElement("div");
-    div.className = "unit";
-    div.innerHTML = `<span class="t">${fmt(u.start)}</span><span class="en">${u.source}</span>
-      <span class="zh">${u.translation || "…"}</span>`;
-    const btn = document.createElement("button");
-    btn.className = "play" + (u.audio_ready ? " ready" : "");
-    btn.textContent = u.audio_ready ? "▶ 配音" : "…";
-    if (u.audio_ready) btn.onclick = () => new Audio(`/api/jobs/${selected}/audio/${u.id}`).play();
-    div.appendChild(btn);
-    $("units").appendChild(div);
-  }
-}
-
-async function poll() {
-  clearTimeout(timer);
-  let st = null;
-  try { st = await api(`/api/jobs/${current}/status`); } catch (e) { return schedule(); }
-  const jobs = await api("/api/jobs");
-  renderJobs(jobs);
-
-  const units = await api(`/api/jobs/${current}/units`).catch(() => []);
-  const showActive = st.running || (st.stage !== "done" && !st.final_ready);
-  $("active").style.display = showActive ? "block" : "none";
-  $("donecard").style.display = st.final_ready ? "block" : "none";
-
-  if (st.final_ready) {
-    if (live.on) { live.on = false; stopAllSources(); $("livevideo").pause(); }
-    $("dname").textContent = st.name;
-    $("srtlink").href = `/api/jobs/${current}/srt`;
-    $("player").src = `/api/jobs/${current}/video`;
-    clearInterval(timer);
-    return;
-  }
-  if (showActive) {
-    $("aname").textContent = st.name;
-    $("astage").textContent = st.error ? ("失败: " + st.error) : st.stage;
-    $("astage").className = "badge " + (st.error ? "err" : "running");
-    $("tr").textContent = st.units_translated; $("tt").textContent = st.units_total;
-    $("sy").textContent = st.units_synthesized; $("tt2").textContent = st.units_total;
-    $("pbar").style.width = st.units_total ? (100 * st.units_synthesized / st.units_total) + "%" : "0";
-    $("qcinfo").textContent = st.qc ? ("QC: " + (st.qc.issues?.length ? st.qc.issues.join(",") : "通过")) : "";
-    renderUnits(units, current);
-    scheduleLive(units);
-  }
-  schedule();
-}
-function schedule() { timer = setTimeout(poll, 1500); }
-
-function renderJobs(jobs) {
-  $("jobs").innerHTML = "";
-  for (const j of jobs) {
-    const div = document.createElement("div");
-    div.className = "job";
-    const cls = j.final_ready ? "done" : (j.running ? "running" : (j.error ? "err" : ""));
-    div.innerHTML = `<span>${j.name}</span>
-      <span class="badge ${cls}">${j.final_ready ? "完成" : (j.error ? "失败" : j.stage)}</span>`;
-    div.onclick = () => { current = j.name; localStorage.setItem("current", current); poll(); };
-    $("jobs").appendChild(div);
-  }
-}
-
-api("/api/health").then(h => {
-  $("llm").textContent = h.llm_ok ? "LLM 在线" : "LLM 离线 (start_llm_server.cmd)";
-  $("llm").className = "badge " + (h.llm_ok ? "done" : "err");
-}).catch(() => {});
-poll();
-</script>
 </body>
 </html>
