@@ -228,13 +228,7 @@ def create_app(cfg: Config) -> object:
             raise HTTPException(404, "srt not ready")
         return FileResponse(path, media_type="application/x-subrip", filename="zh.srt")
 
-    @app.get("/api/jobs/{name}/video")
-    def video(name: str, request: Request):
-        if not _NAME_RE.fullmatch(name):
-            raise HTTPException(400, "bad job name")
-        path = cfg.work_dir / name / "final.zh.mp4"
-        if not path.exists():
-            raise HTTPException(404, "video not ready")
+    def _range_response(path: Path, request: Request, media_type: str):
         range_header = request.headers.get("range")
         file_size = path.stat().st_size
         if range_header:
@@ -247,12 +241,33 @@ def create_app(cfg: Config) -> object:
                     f.seek(start)
                     data = f.read(end - start + 1)
                 return Response(
-                    content=data, media_type="video/mp4", status_code=206,
+                    content=data, media_type=media_type, status_code=206,
                     headers={
                         "Content-Range": f"bytes {start}-{end}/{file_size}",
                         "Accept-Ranges": "bytes",
                     },
                 )
-        return FileResponse(path, media_type="video/mp4")
+        return FileResponse(path, media_type=media_type)
+
+    @app.get("/api/jobs/{name}/video")
+    def video(name: str, request: Request):
+        if not _NAME_RE.fullmatch(name):
+            raise HTTPException(400, "bad job name")
+        path = cfg.work_dir / name / "final.zh.mp4"
+        if not path.exists():
+            raise HTTPException(404, "video not ready")
+        return _range_response(path, request, "video/mp4")
+
+    @app.get("/api/jobs/{name}/source_video")
+    def source_video(name: str, request: Request):
+        if not _NAME_RE.fullmatch(name):
+            raise HTTPException(400, "bad job name")
+        state_path = cfg.work_dir / name / "state.json"
+        if not state_path.exists():
+            raise HTTPException(404, "job not found")
+        video_path = Path(read_json(state_path)["source"]["video_path"])
+        if not video_path.exists():
+            raise HTTPException(404, "source video missing")
+        return _range_response(video_path, request, "video/mp4")
 
     return app

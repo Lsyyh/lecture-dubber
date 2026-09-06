@@ -72,6 +72,12 @@
       <span id="qcinfo"></span>
     </div>
     <div class="bar"><div id="pbar"></div></div>
+    <div id="livebox" style="margin-top:12px">
+      <button id="livestart">▶ 实时预览（看原视频 + 实时配音）</button>
+      <span class="muted" id="livestat" style="margin-left:10px"></span>
+      <video id="livevideo" controls style="width:100%;margin-top:8px;border-radius:8px;background:#000;display:none"></video>
+      <div class="muted" style="margin-top:6px">原声已调低垫在配音下；追不上的单元会静音跳过，成片不受影响。</div>
+    </div>
     <div style="margin-top:12px"><button class="ghost" id="cancel">取消</button></div>
     <div class="units" id="units"></div>
   </div>
@@ -117,6 +123,65 @@ $("cancel").onclick = async () => {
 
 function fmt(s) { const m = Math.floor(s/60), r = (s%60).toFixed(1); return `${m}:${r.padStart(4,"0")}`; }
 
+// ---- live preview: original video + dub scheduled on an audio timeline ----
+const live = { ctx: null, job: "", on: false, scheduled: new Set(), sources: [],
+               buffering: false, skipped: 0 };
+
+$("livestart").onclick = () => {
+  if (!live.ctx) live.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  live.ctx.resume();
+  live.job = current; live.on = true;
+  live.scheduled = new Set(); live.sources = []; live.skipped = 0;
+  const v = $("livevideo");
+  v.src = `/api/jobs/${current}/source_video`;
+  v.volume = 0.08;               // original audio low, dub on top
+  v.style.display = "block";
+  $("livestart").style.display = "none";
+  v.onseeked = () => { stopAllSources(); live.scheduled = new Set(); };
+  v.play();
+  poll();
+};
+
+function stopAllSources() {
+  for (const s of live.sources) { try { s.stop(); } catch (e) {} }
+  live.sources = [];
+}
+
+function scheduleLive(units) {
+  if (!live.on) return;
+  const v = $("livevideo");
+  const t = v.currentTime;
+  let frontier = t;
+  for (const u of units) {
+    if (u.audio_ready) frontier = Math.max(frontier, u.end);
+    if (live.scheduled.has(u.id) || !u.audio_ready) continue;
+    live.scheduled.add(u.id);
+    const late = t - u.start;
+    if (late > 3) { live.skipped++; continue; }   // playback already passed: skip
+    fetch(`/api/jobs/${live.job}/audio/${u.id}`)
+      .then(r => r.arrayBuffer())
+      .then(buf => live.ctx.decodeAudioData(buf))
+      .then(audio => {
+        const at = Math.max(live.ctx.currentTime + 0.05, live.ctx.currentTime + (u.start - v.currentTime));
+        const src = live.ctx.createBufferSource();
+        src.buffer = audio; src.connect(live.ctx.destination);
+        src.start(at);
+        live.sources.push(src);
+      });
+  }
+  // buffer management: dubbing frontier must stay ahead of the playhead
+  const lead = frontier - t;
+  $("livestat").textContent = `合成领先 ${lead.toFixed(0)} 秒` +
+      (live.skipped ? ` · 已跳过 ${live.skipped} 段` : "");
+  if (!live.buffering && lead < 4 && !v.paused && !v.ended) {
+    live.buffering = true; v.pause(); $("livestat").textContent += " · 缓冲中…";
+  } else if (live.buffering && (lead > 12 || v.ended)) {
+    live.buffering = false; v.play();
+  }
+  // job finished while previewing
+  if (v.ended) { live.on = false; stopAllSources(); }
+}
+
 function renderUnits(units, selected) {
   $("units").innerHTML = "";
   for (const u of units) {
@@ -146,6 +211,7 @@ async function poll() {
   $("donecard").style.display = st.final_ready ? "block" : "none";
 
   if (st.final_ready) {
+    if (live.on) { live.on = false; stopAllSources(); $("livevideo").pause(); }
     $("dname").textContent = st.name;
     $("srtlink").href = `/api/jobs/${current}/srt`;
     $("player").src = `/api/jobs/${current}/video`;
@@ -161,6 +227,7 @@ async function poll() {
     $("pbar").style.width = st.units_total ? (100 * st.units_synthesized / st.units_total) + "%" : "0";
     $("qcinfo").textContent = st.qc ? ("QC: " + (st.qc.issues?.length ? st.qc.issues.join(",") : "通过")) : "";
     renderUnits(units, current);
+    scheduleLive(units);
   }
   schedule();
 }
