@@ -29,7 +29,7 @@ class StablePrefixBuffer:
     the stream.
     """
 
-    def __init__(self, trailing_keep: int = 1, max_pending_s: float = 2.5) -> None:
+    def __init__(self, trailing_keep: int = 1, max_pending_s: float = 2.0) -> None:
         self.trailing_keep = trailing_keep
         self.max_pending_s = max_pending_s
         self._prev: list[WordTok] = []
@@ -139,7 +139,7 @@ class LatencyPolicy:
 
 
 _POLICIES = {
-    "NORMAL": LatencyPolicy("NORMAL", 1.0, ClausePolicy(18, 2.0), ""),
+    "NORMAL": LatencyPolicy("NORMAL", 1.0, ClausePolicy(18, 1.4), ""),
     "CONCISE": LatencyPolicy(
         "CONCISE",
         1.05,

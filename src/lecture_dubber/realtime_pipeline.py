@@ -26,10 +26,12 @@ from .realtime_text import (
     strip_fillers,
 )
 
-ASR_TICK_S = 1.3
+ASR_TICK_S = 1.0
 WINDOW_PREROLL_S = 0.25
 MAX_WINDOW_S = 28.0
 TTS_MERGE_MAX = 4
+# Dub more than this far behind the live speech is skipped by the play loop.
+STALE_SKIP_S = 6.0
 
 
 class RealtimeSession:
@@ -70,7 +72,7 @@ class RealtimeSession:
         self.dir.mkdir(parents=True, exist_ok=True)
 
         self._ring = None
-        self._spb = StablePrefixBuffer()
+        self._spb = StablePrefixBuffer(max_pending_s=2.0)
         self._segmenter = ClauseSegmenter()
         self._seq = SeqGen()
         self._trace_lock = threading.Lock()
@@ -345,6 +347,18 @@ class RealtimeSession:
                 try:
                     chunk = self._q_play.get(timeout=0.5)
                 except queue.Empty:
+                    continue
+                # Catch-up: dub spoken more than STALE_SKIP_S in the past can
+                # never be heard in sync; skip it and move on, or the queue
+                # grows unboundedly when the dub rate trails the source rate.
+                last_ts = self._ring.last_ts if self._ring is not None else 0.0
+                if last_ts - chunk.source_end_ts > STALE_SKIP_S:
+                    self._counters["stale_skipped"] = self._counters.get("stale_skipped", 0) + 1
+                    self._log(
+                        "stale_skipped",
+                        seq=chunk.clause_seq,
+                        behind_s=round(last_ts - chunk.source_end_ts, 1),
+                    )
                     continue
                 started = player_ctx.play(chunk.pcm, chunk.sample_rate)
                 self._played_source_ts = chunk.source_end_ts
